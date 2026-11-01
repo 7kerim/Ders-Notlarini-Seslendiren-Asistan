@@ -1,4 +1,5 @@
 using FluentValidation;
+using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Options;
 using SesliAsistan.Business.DTOs.Auth;
@@ -16,32 +17,44 @@ public class AuthService : IAuthService
 {
     private readonly IUserRepository _users;
     private readonly IRefreshTokenRepository _refreshTokens;
+    private readonly IPasswordResetCodeRepository _resetCodes;
+    private readonly IEmailSender _emailSender;
     private readonly IUnitOfWork _uow;
     private readonly IPasswordHasher _hasher;
     private readonly ITokenService _tokens;
     private readonly IValidator<RegisterRequest> _registerValidator;
     private readonly IValidator<LoginRequest> _loginValidator;
+    private readonly IValidator<ForgotPasswordRequest> _forgotPasswordValidator;
+    private readonly IValidator<ResetPasswordRequest> _resetPasswordValidator;
     private readonly JwtOptions _jwt;
     private readonly ILogger<AuthService> _logger;
 
     public AuthService(
         IUserRepository users,
         IRefreshTokenRepository refreshTokens,
+        IPasswordResetCodeRepository resetCodes,
+        IEmailSender emailSender,
         IUnitOfWork uow,
         IPasswordHasher hasher,
         ITokenService tokens,
         IValidator<RegisterRequest> registerValidator,
         IValidator<LoginRequest> loginValidator,
+        IValidator<ForgotPasswordRequest> forgotPasswordValidator,
+        IValidator<ResetPasswordRequest> resetPasswordValidator,
         IOptions<JwtOptions> jwt,
         ILogger<AuthService> logger)
     {
         _users = users;
         _refreshTokens = refreshTokens;
+        _resetCodes = resetCodes;
+        _emailSender = emailSender;
         _uow = uow;
         _hasher = hasher;
         _tokens = tokens;
         _registerValidator = registerValidator;
         _loginValidator = loginValidator;
+        _forgotPasswordValidator = forgotPasswordValidator;
+        _resetPasswordValidator = resetPasswordValidator;
         _jwt = jwt.Value;
         _logger = logger;
     }
@@ -111,6 +124,84 @@ public class AuthService : IAuthService
 
         existing.RevokedAt = DateTime.UtcNow;
         await _uow.SaveChangesAsync(ct);
+    }
+
+    public async Task ForgotPasswordAsync(ForgotPasswordRequest request, CancellationToken ct = default)
+    {
+        await _forgotPasswordValidator.ValidateOrThrowAsync(request, ct);
+
+        var email = NormalizeEmail(request.Email);
+        var user = await _users.GetByEmailAsync(email, ct);
+
+        // Kullanıcı bulunamazsa da bilgi sızdırmamak için hata fırlatılmaz
+        if (user is null || user.IsDeleted || !user.IsActive)
+            return;
+
+        // Önceki aktif kodları iptal et
+        await _resetCodes.InvalidateUserCodesAsync(user.Id, ct);
+
+        // 6 haneli rastgele kod üret
+        var plainCode = System.Security.Cryptography.RandomNumberGenerator.GetInt32(100000, 1000000).ToString();
+        var codeHash = _tokens.HashToken(plainCode);
+
+        var resetCode = new PasswordResetCode
+        {
+            UserId = user.Id,
+            CodeHash = codeHash,
+            ExpiresAt = DateTime.UtcNow.AddMinutes(15),
+            FailedAttempts = 0,
+            IsUsed = false
+        };
+
+        await _resetCodes.AddAsync(resetCode, ct);
+        await _uow.SaveChangesAsync(ct);
+
+        await _emailSender.SendPasswordResetCodeAsync(user.Email, plainCode, ct);
+        _logger.LogInformation("Kullanıcı için şifre sıfırlama kodu oluşturuldu: {UserId}", user.Id);
+    }
+
+    public async Task ResetPasswordAsync(ResetPasswordRequest request, CancellationToken ct = default)
+    {
+        await _resetPasswordValidator.ValidateOrThrowAsync(request, ct);
+
+        var email = NormalizeEmail(request.Email);
+        var user = await _users.GetByEmailAsync(email, ct);
+
+        if (user is null || user.IsDeleted || !user.IsActive)
+            throw new UnauthorizedAppException("Geçersiz veya süresi dolmuş sıfırlama kodu.");
+
+        var validCode = await _resetCodes.GetLatestValidCodeAsync(user.Id, ct);
+        if (validCode is null || !validCode.IsValid)
+            throw new UnauthorizedAppException("Geçersiz veya süresi dolmuş sıfırlama kodu.");
+
+        var inputHash = _tokens.HashToken(request.Code);
+        if (inputHash != validCode.CodeHash)
+        {
+            validCode.FailedAttempts++;
+            if (validCode.FailedAttempts >= 5)
+            {
+                validCode.IsUsed = true;
+            }
+            await _uow.SaveChangesAsync(ct);
+            throw new UnauthorizedAppException("Geçersiz veya süresi dolmuş sıfırlama kodu.");
+        }
+
+        // Kod doğru: şifreyi güncelle ve kodu kullanıldı yap
+        validCode.IsUsed = true;
+        user.PasswordHash = _hasher.Hash(request.NewPassword);
+
+        // Tüm açık oturumları (refresh token'ları) kapat
+        var activeTokens = await _refreshTokens.Query()
+            .Where(t => t.UserId == user.Id && t.RevokedAt == null)
+            .ToListAsync(ct);
+
+        foreach (var t in activeTokens)
+        {
+            t.RevokedAt = DateTime.UtcNow;
+        }
+
+        await _uow.SaveChangesAsync(ct);
+        _logger.LogInformation("Şifre sıfırlandı ve tüm oturumlar kapatıldı: {UserId}", user.Id);
     }
 
     private async Task<AuthResponse> IssueTokensAsync(User user, string? ipAddress, CancellationToken ct)

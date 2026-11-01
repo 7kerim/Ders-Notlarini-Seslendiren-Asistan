@@ -18,3 +18,13 @@ public class FileStorageOptions
     /// <summary>Fonksiyonel olmayan gereksinim: dosya boyutu ≤ 20 MB.</summary>
     public long MaxFileSizeBytes { get; set; } = 20 * 1024 * 1024;
 }
+
+public class TtsOptions
+{
+    public const string SectionName = "Tts";
+    public string Provider { get; set; } = "Mock"; // "Mock" veya "Azure"
+    public string AzureApiKey { get; set; } = "";
+    public string AzureRegion { get; set; } = "westeurope";
+    public string DefaultVoice { get; set; } = "tr-TR-EmelNeural";
+    public decimal DefaultSpeed { get; set; } = 1.0m;
+}

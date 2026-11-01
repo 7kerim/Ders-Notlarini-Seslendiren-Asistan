@@ -24,3 +24,7 @@ public record AuthResponse(
 public record UpdateProfileRequest(string FullName, string PreferredVoice, decimal PlaybackSpeed);
 
 public record ChangePasswordRequest(string CurrentPassword, string NewPassword);
+
+public record ForgotPasswordRequest(string Email);
+
+public record ResetPasswordRequest(string Email, string Code, string NewPassword);

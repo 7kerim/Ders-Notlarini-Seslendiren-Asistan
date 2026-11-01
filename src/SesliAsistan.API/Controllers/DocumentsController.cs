@@ -2,11 +2,12 @@ using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
 using SesliAsistan.API.Extensions;
 using SesliAsistan.Business.DTOs.Documents;
+using SesliAsistan.Business.DTOs.Learning;
 using SesliAsistan.Business.Interfaces;
 
 namespace SesliAsistan.API.Controllers;
 
-/// <summary>FG-2 ve FG-5: Belge yükleme, listeleme, konu ağacı ve silme.</summary>
+/// <summary>FG-2, FG-3, FG-4, FG-5: Belge yönetimi, konu ağacı, seslendirme, özet ve dinleme konumu.</summary>
 [ApiController]
 [Route("api/v1/documents")]
 [Authorize(Policy = "StudentOrAdmin")]
@@ -14,8 +15,21 @@ namespace SesliAsistan.API.Controllers;
 public class DocumentsController : ControllerBase
 {
     private readonly IDocumentService _documents;
+    private readonly ITtsService _tts;
+    private readonly ISummaryService _summaries;
+    private readonly IListeningProgressService _progress;
 
-    public DocumentsController(IDocumentService documents) => _documents = documents;
+    public DocumentsController(
+        IDocumentService documents,
+        ITtsService tts,
+        ISummaryService summaries,
+        IListeningProgressService progress)
+    {
+        _documents = documents;
+        _tts = tts;
+        _summaries = summaries;
+        _progress = progress;
+    }
 
     /// <summary>PDF veya .docx yükler (≤ 20 MB). Metin çıkarma arka planda yapılır; yanıt 202 Accepted döner.</summary>
     [HttpPost]
@@ -57,6 +71,41 @@ public class DocumentsController : ControllerBase
     [ProducesResponseType<ProblemDetails>(StatusCodes.Status404NotFound)]
     public async Task<ActionResult<SectionContentDto>> GetSection(Guid id, Guid sectionId, CancellationToken ct) =>
         Ok(await _documents.GetSectionAsync(User.GetUserId(), id, sectionId, ct));
+
+    /// <summary>FG-3: Konu ağacından seçilen bölümün sesini üretir veya önbellekten döner.</summary>
+    [HttpGet("{id:guid}/sections/{sectionId:guid}/audio")]
+    [ProducesResponseType<AudioResultDto>(StatusCodes.Status200OK)]
+    [ProducesResponseType<ProblemDetails>(StatusCodes.Status404NotFound)]
+    public async Task<ActionResult<AudioResultDto>> GetSectionAudio(
+        Guid id, Guid sectionId, [FromQuery] string? voice = null, [FromQuery] decimal? speed = null, CancellationToken ct = default) =>
+        Ok(await _tts.SynthesizeSectionAudioAsync(User.GetUserId(), id, sectionId, voice, speed, ct));
+
+    /// <summary>FG-4: Bölüm için TextRank algoritmasıyla kısa/orta/detaylı sesli özet üretir.</summary>
+    [HttpPost("{id:guid}/sections/{sectionId:guid}/summary")]
+    [ProducesResponseType<SummaryDto>(StatusCodes.Status200OK)]
+    [ProducesResponseType<ProblemDetails>(StatusCodes.Status404NotFound)]
+    public async Task<ActionResult<SummaryDto>> CreateSectionSummary(
+        Guid id, Guid sectionId, [FromBody] CreateSummaryRequest request, CancellationToken ct = default) =>
+        Ok(await _summaries.CreateSummaryAsync(User.GetUserId(), id, sectionId, request.Length, ct));
+
+    /// <summary>FG-3: Belgenin dinleme konumunu (bölüm ve saniye) kaydeder.</summary>
+    [HttpPut("{id:guid}/progress")]
+    [ProducesResponseType(StatusCodes.Status200OK)]
+    public async Task<IActionResult> SaveProgress(Guid id, [FromBody] SaveProgressRequest request, CancellationToken ct = default)
+    {
+        await _progress.SaveProgressAsync(User.GetUserId(), id, request, ct);
+        return Ok(new { message = "Dinleme konumu kaydedildi." });
+    }
+
+    /// <summary>FG-3: Belgenin son dinleme konumunu ("kaldığı yerden devam") getirir.</summary>
+    [HttpGet("{id:guid}/progress")]
+    [ProducesResponseType<ListeningProgressDto>(StatusCodes.Status200OK)]
+    [ProducesResponseType(StatusCodes.Status204NoContent)]
+    public async Task<ActionResult<ListeningProgressDto?>> GetProgress(Guid id, CancellationToken ct = default)
+    {
+        var result = await _progress.GetProgressAsync(User.GetUserId(), id, ct);
+        return result is null ? NoContent() : Ok(result);
+    }
 
     /// <summary>İşlenemeyen (Failed) belgeyi tekrar kuyruğa alır.</summary>
     [HttpPost("{id:guid}/reprocess")]

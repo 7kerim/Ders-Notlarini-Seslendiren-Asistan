@@ -2,6 +2,7 @@ using Microsoft.EntityFrameworkCore;
 using SesliAsistan.DataAccess.Context;
 using SesliAsistan.Entities.Common;
 using SesliAsistan.Entities.Entities;
+using SesliAsistan.Entities.Enums;
 
 namespace SesliAsistan.DataAccess.Repositories;
 
@@ -103,6 +104,70 @@ public class DocumentRepository : GenericRepository<Document>, IDocumentReposito
         Set.AsNoTracking()
            .Include(d => d.Sections.OrderBy(s => s.OrderIndex))
            .FirstOrDefaultAsync(d => d.Id == id, ct);
+}
+
+public interface IPasswordResetCodeRepository : IGenericRepository<PasswordResetCode>
+{
+    Task<PasswordResetCode?> GetLatestValidCodeAsync(Guid userId, CancellationToken ct = default);
+    Task InvalidateUserCodesAsync(Guid userId, CancellationToken ct = default);
+}
+
+public class PasswordResetCodeRepository : GenericRepository<PasswordResetCode>, IPasswordResetCodeRepository
+{
+    public PasswordResetCodeRepository(AppDbContext context) : base(context) { }
+
+    public Task<PasswordResetCode?> GetLatestValidCodeAsync(Guid userId, CancellationToken ct = default) =>
+        Set.Where(c => c.UserId == userId && !c.IsUsed && c.FailedAttempts < 5 && c.ExpiresAt > DateTime.UtcNow)
+           .OrderByDescending(c => c.CreatedAt)
+           .FirstOrDefaultAsync(ct);
+
+    public async Task InvalidateUserCodesAsync(Guid userId, CancellationToken ct = default)
+    {
+        var activeCodes = await Set.Where(c => c.UserId == userId && !c.IsUsed).ToListAsync(ct);
+        foreach (var code in activeCodes)
+        {
+            code.IsUsed = true;
+        }
+    }
+}
+
+public interface IAudioAssetRepository : IGenericRepository<AudioAsset>
+{
+    Task<AudioAsset?> FindByHashAsync(string contentHash, string voice, decimal speed, CancellationToken ct = default);
+}
+
+public class AudioAssetRepository : GenericRepository<AudioAsset>, IAudioAssetRepository
+{
+    public AudioAssetRepository(AppDbContext context) : base(context) { }
+
+    public Task<AudioAsset?> FindByHashAsync(string contentHash, string voice, decimal speed, CancellationToken ct = default) =>
+        Set.FirstOrDefaultAsync(a => a.ContentHash == contentHash && a.Voice == voice && a.Speed == speed, ct);
+}
+
+public interface IListeningProgressRepository : IGenericRepository<ListeningProgress>
+{
+    Task<ListeningProgress?> GetByDocumentAsync(Guid userId, Guid documentId, CancellationToken ct = default);
+}
+
+public class ListeningProgressRepository : GenericRepository<ListeningProgress>, IListeningProgressRepository
+{
+    public ListeningProgressRepository(AppDbContext context) : base(context) { }
+
+    public Task<ListeningProgress?> GetByDocumentAsync(Guid userId, Guid documentId, CancellationToken ct = default) =>
+        Set.FirstOrDefaultAsync(p => p.UserId == userId && p.DocumentId == documentId, ct);
+}
+
+public interface ISummaryRepository : IGenericRepository<Summary>
+{
+    Task<Summary?> GetBySectionAsync(Guid documentId, Guid sectionId, SummaryLength length, CancellationToken ct = default);
+}
+
+public class SummaryRepository : GenericRepository<Summary>, ISummaryRepository
+{
+    public SummaryRepository(AppDbContext context) : base(context) { }
+
+    public Task<Summary?> GetBySectionAsync(Guid documentId, Guid sectionId, SummaryLength length, CancellationToken ct = default) =>
+        Set.FirstOrDefaultAsync(s => s.DocumentId == documentId && s.Length == length, ct);
 }
 
 /// <summary>Birden fazla repository üzerindeki değişiklikleri tek işlemde kaydeder.</summary>

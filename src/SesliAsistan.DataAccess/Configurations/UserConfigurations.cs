@@ -65,6 +65,7 @@ public class GroupMemberConfiguration : IEntityTypeConfiguration<GroupMember>
     }
 }
 
+
 public class SharedContentConfiguration : IEntityTypeConfiguration<SharedContent>
 {
     public void Configure(EntityTypeBuilder<SharedContent> b)
@@ -101,3 +102,17 @@ public class NotificationConfiguration : IEntityTypeConfiguration<Notification>
         b.HasOne(x => x.User).WithMany().HasForeignKey(x => x.UserId).OnDelete(DeleteBehavior.Cascade);
     }
 }
+
+public class PasswordResetCodeConfiguration : IEntityTypeConfiguration<PasswordResetCode>
+{
+    public void Configure(EntityTypeBuilder<PasswordResetCode> b)
+    {
+        b.ToTable("password_reset_codes");
+        b.Property(x => x.CodeHash).HasMaxLength(64).IsRequired();
+        b.HasIndex(x => new { x.UserId, x.ExpiresAt });
+        b.Ignore(x => x.IsValid);
+        b.HasOne(x => x.User).WithMany(u => u.PasswordResetCodes)
+            .HasForeignKey(x => x.UserId).OnDelete(DeleteBehavior.Cascade);
+    }
+}
+
