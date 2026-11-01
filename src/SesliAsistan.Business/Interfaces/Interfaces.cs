@@ -1,5 +1,6 @@
 using SesliAsistan.Business.DTOs.Auth;
 using SesliAsistan.Business.DTOs.Documents;
+using SesliAsistan.Business.DTOs.Learning;
 using SesliAsistan.Business.TextExtraction;
 using SesliAsistan.Entities.Entities;
 using SesliAsistan.Entities.Enums;
@@ -12,6 +13,13 @@ public interface IAuthService
     Task<AuthResponse> LoginAsync(LoginRequest request, string? ipAddress, CancellationToken ct = default);
     Task<AuthResponse> RefreshAsync(string refreshToken, string? ipAddress, CancellationToken ct = default);
     Task LogoutAsync(string refreshToken, CancellationToken ct = default);
+    Task ForgotPasswordAsync(ForgotPasswordRequest request, CancellationToken ct = default);
+    Task ResetPasswordAsync(ResetPasswordRequest request, CancellationToken ct = default);
+}
+
+public interface IEmailSender
+{
+    Task SendPasswordResetCodeAsync(string toEmail, string code, CancellationToken ct = default);
 }
 
 public interface IUserService
@@ -76,4 +84,34 @@ public interface ITextExtractor
 {
     DocumentFileType SupportedType { get; }
     Task<ExtractionResult> ExtractAsync(Stream content, CancellationToken ct = default);
+}
+
+public interface ITtsProvider
+{
+    Task<byte[]> SynthesizeAsync(string ssml, string voice, decimal speed, CancellationToken ct = default);
+}
+
+public interface ITtsService
+{
+    Task<AudioResultDto> SynthesizeSectionAudioAsync(Guid userId, Guid documentId, Guid sectionId, string? voice, decimal? speed, CancellationToken ct = default);
+    Task<AudioResultDto> SynthesizeSummaryAudioAsync(Guid userId, Guid summaryId, string? voice, decimal? speed, CancellationToken ct = default);
+    Task<(Stream Stream, string ContentType, long FileLength)> GetAudioStreamAsync(Guid audioId, CancellationToken ct = default);
+    IReadOnlyList<VoiceDto> GetAvailableVoices();
+}
+
+public interface IListeningProgressService
+{
+    Task SaveProgressAsync(Guid userId, Guid documentId, SaveProgressRequest request, CancellationToken ct = default);
+    Task<ListeningProgressDto?> GetProgressAsync(Guid userId, Guid documentId, CancellationToken ct = default);
+}
+
+public interface ITextRankSummarizer
+{
+    string Summarize(string text, SummaryLength length);
+}
+
+public interface ISummaryService
+{
+    Task<SummaryDto> CreateSummaryAsync(Guid userId, Guid documentId, Guid sectionId, SummaryLength length, CancellationToken ct = default);
+    Task<SummaryDto> GetSummaryAsync(Guid userId, Guid summaryId, CancellationToken ct = default);
 }

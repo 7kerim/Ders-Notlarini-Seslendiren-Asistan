@@ -27,6 +27,7 @@ public class AppDbContext : DbContext
     public DbSet<SharedContent> SharedContents => Set<SharedContent>();
     public DbSet<ContentReport> ContentReports => Set<ContentReport>();
     public DbSet<Notification> Notifications => Set<Notification>();
+    public DbSet<PasswordResetCode> PasswordResetCodes => Set<PasswordResetCode>();
 
     protected override void OnModelCreating(ModelBuilder modelBuilder)
     {
@@ -34,6 +35,26 @@ public class AppDbContext : DbContext
 
         // Configurations/ klasöründeki tüm IEntityTypeConfiguration sınıflarını uygula
         modelBuilder.ApplyConfigurationsFromAssembly(typeof(AppDbContext).Assembly);
+
+        // PostgreSQL DateTime UTC ValueConverter: Npgsql Kind=Unspecified hatasını önler
+        var utcConverter = new Microsoft.EntityFrameworkCore.Storage.ValueConversion.ValueConverter<DateTime, DateTime>(
+            v => v.Kind == DateTimeKind.Utc ? v : DateTime.SpecifyKind(v, DateTimeKind.Utc),
+            v => DateTime.SpecifyKind(v, DateTimeKind.Utc));
+
+        var nullableUtcConverter = new Microsoft.EntityFrameworkCore.Storage.ValueConversion.ValueConverter<DateTime?, DateTime?>(
+            v => !v.HasValue ? v : (v.Value.Kind == DateTimeKind.Utc ? v : DateTime.SpecifyKind(v.Value, DateTimeKind.Utc)),
+            v => !v.HasValue ? v : DateTime.SpecifyKind(v.Value, DateTimeKind.Utc));
+
+        foreach (var entityType in modelBuilder.Model.GetEntityTypes())
+        {
+            foreach (var property in entityType.GetProperties())
+            {
+                if (property.ClrType == typeof(DateTime))
+                    property.SetValueConverter(utcConverter);
+                else if (property.ClrType == typeof(DateTime?))
+                    property.SetValueConverter(nullableUtcConverter);
+            }
+        }
 
         // Yumuşak silinen kayıtları tüm sorgulardan otomatik olarak gizleyen global filtre
         foreach (var entityType in modelBuilder.Model.GetEntityTypes())

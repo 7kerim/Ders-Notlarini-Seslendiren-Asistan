@@ -50,6 +50,34 @@ public class ChangePasswordRequestValidator : AbstractValidator<ChangePasswordRe
     }
 }
 
+public class ForgotPasswordRequestValidator : AbstractValidator<ForgotPasswordRequest>
+{
+    public ForgotPasswordRequestValidator()
+    {
+        RuleFor(x => x.Email)
+            .NotEmpty().WithMessage("E-posta zorunludur.")
+            .EmailAddress().WithMessage("Geçerli bir e-posta adresi giriniz.")
+            .MaximumLength(256);
+    }
+}
+
+public class ResetPasswordRequestValidator : AbstractValidator<ResetPasswordRequest>
+{
+    public ResetPasswordRequestValidator()
+    {
+        RuleFor(x => x.Email)
+            .NotEmpty().WithMessage("E-posta zorunludur.")
+            .EmailAddress().WithMessage("Geçerli bir e-posta adresi giriniz.");
+
+        RuleFor(x => x.Code)
+            .NotEmpty().WithMessage("Doğrulama kodu zorunludur.")
+            .Length(6).WithMessage("Doğrulama kodu 6 haneli olmalıdır.")
+            .Matches("^[0-9]{6}$").WithMessage("Doğrulama kodu yalnızca rakamlardan oluşmalıdır.");
+
+        RuleFor(x => x.NewPassword).SetValidator(new PasswordPolicyValidator());
+    }
+}
+
 /// <summary>Şifre politikası: en az 8 karakter, büyük harf, küçük harf ve rakam.</summary>
 public class PasswordPolicyValidator : AbstractValidator<string>
 {

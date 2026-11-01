@@ -17,6 +17,10 @@ public static class DataAccessServiceRegistration
         services.AddScoped<IUserRepository, UserRepository>();
         services.AddScoped<IRefreshTokenRepository, RefreshTokenRepository>();
         services.AddScoped<IDocumentRepository, DocumentRepository>();
+        services.AddScoped<IPasswordResetCodeRepository, PasswordResetCodeRepository>();
+        services.AddScoped<IAudioAssetRepository, AudioAssetRepository>();
+        services.AddScoped<IListeningProgressRepository, ListeningProgressRepository>();
+        services.AddScoped<ISummaryRepository, SummaryRepository>();
         services.AddScoped<IUnitOfWork, UnitOfWork>();
         return services;
     }

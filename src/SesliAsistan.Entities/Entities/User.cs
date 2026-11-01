@@ -22,4 +22,5 @@ public class User : BaseEntity, ISoftDeletable
 
     public ICollection<Document> Documents { get; set; } = new List<Document>();
     public ICollection<RefreshToken> RefreshTokens { get; set; } = new List<RefreshToken>();
+    public ICollection<PasswordResetCode> PasswordResetCodes { get; set; } = new List<PasswordResetCode>();
 }

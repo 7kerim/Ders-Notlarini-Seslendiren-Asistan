@@ -56,5 +56,28 @@ public class AuthController : ControllerBase
         return NoContent();
     }
 
+    /// <summary>FG-1: Şifre sıfırlama için e-postaya tek kullanımlık 6 haneli kod gönderir.</summary>
+    [HttpPost("forgot-password")]
+    [AllowAnonymous]
+    [ProducesResponseType(StatusCodes.Status200OK)]
+    [ProducesResponseType<ValidationProblemDetails>(StatusCodes.Status400BadRequest)]
+    public async Task<IActionResult> ForgotPassword(ForgotPasswordRequest request, CancellationToken ct)
+    {
+        await _auth.ForgotPasswordAsync(request, ct);
+        return Ok(new { message = "Şifre sıfırlama kodu kayıtlı e-posta adresinize gönderildi." });
+    }
+
+    /// <summary>FG-1: 6 haneli kod ile yeni şifre belirler ve tüm açık oturumları kapatır.</summary>
+    [HttpPost("reset-password")]
+    [AllowAnonymous]
+    [ProducesResponseType(StatusCodes.Status200OK)]
+    [ProducesResponseType<ValidationProblemDetails>(StatusCodes.Status400BadRequest)]
+    [ProducesResponseType<ProblemDetails>(StatusCodes.Status401Unauthorized)]
+    public async Task<IActionResult> ResetPassword(ResetPasswordRequest request, CancellationToken ct)
+    {
+        await _auth.ResetPasswordAsync(request, ct);
+        return Ok(new { message = "Şifreniz başarıyla güncellendi. Yeni şifrenizle giriş yapabilirsiniz." });
+    }
+
     private string? ClientIp => HttpContext.Connection.RemoteIpAddress?.ToString();
 }

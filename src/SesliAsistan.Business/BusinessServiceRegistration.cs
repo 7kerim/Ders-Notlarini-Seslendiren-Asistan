@@ -14,6 +14,7 @@ public static class BusinessServiceRegistration
     {
         services.Configure<JwtOptions>(configuration.GetSection(JwtOptions.SectionName));
         services.Configure<FileStorageOptions>(configuration.GetSection(FileStorageOptions.SectionName));
+        services.Configure<TtsOptions>(configuration.GetSection(TtsOptions.SectionName));
 
         services.AddValidatorsFromAssembly(typeof(BusinessServiceRegistration).Assembly);
 
@@ -22,6 +23,10 @@ public static class BusinessServiceRegistration
         services.AddSingleton<IFileValidator, FileValidator>();
         services.AddSingleton<IFileStorage, LocalFileStorage>();
         services.AddSingleton<IDocumentProcessingQueue, DocumentProcessingQueue>();
+        services.AddSingleton<IEmailSender, LoggerEmailSender>();
+        services.AddSingleton<ITextRankSummarizer, SesliAsistan.Business.Speech.TextRankSummarizer>();
+
+        services.AddHttpClient<ITtsProvider, SesliAsistan.Business.Speech.AzureSpeechTtsProvider>();
 
         services.AddSingleton<ITextExtractor, PdfTextExtractor>();
         services.AddSingleton<ITextExtractor, DocxTextExtractor>();
@@ -30,6 +35,9 @@ public static class BusinessServiceRegistration
         services.AddScoped<IUserService, UserService>();
         services.AddScoped<IDocumentService, DocumentService>();
         services.AddScoped<IDocumentProcessor, DocumentProcessor>();
+        services.AddScoped<ITtsService, TtsService>();
+        services.AddScoped<IListeningProgressService, ListeningProgressService>();
+        services.AddScoped<ISummaryService, SummaryService>();
         return services;
     }
 }
